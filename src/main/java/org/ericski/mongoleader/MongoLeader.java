@@ -59,7 +59,6 @@ public class MongoLeader implements AutoCloseable
 		filter = Filters.eq(ID_FIELD, id);
 		uo = new UpdateOptions();
 		uo.upsert(true);
-		System.out.println(id);
 	}
 
 	public synchronized void heartbeat()
