@@ -9,61 +9,94 @@ import com.mongodb.client.model.Sorts;
 import com.mongodb.client.model.UpdateOptions;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.bson.types.ObjectId;
 
-public class MongoLeader {
+public class MongoLeader implements AutoCloseable
+{
+	public static final String DEFAULT_LEADER_DB = "leader_keys";
+	public static final long DEFAULT_LOCK_LIFE = 5L;
 
-    private static final String HEARTBEAT_FIELD = "heartbeat";
-    private static final String ID_FIELD = "_id";
+	private static final String HEARTBEAT_FIELD = "heartbeat";
+	private static final String ID_FIELD = "_id";
 
-    private final MongoDatabase database;
-    private final MongoCollection<Document> leaders;
-    private final ObjectId id;
-    private final Document hb;
-    private final Bson filter;
-    private final UpdateOptions uo;
+	private final AtomicBoolean steppedDown = new AtomicBoolean();
 
-    public MongoLeader(MongoClient mongoClient, String leaderKey, String meta) {
-        this(mongoClient, leaderKey, 5L, "leader_key", meta);
-    }
+	private final MongoDatabase database;
+	private final MongoCollection<Document> leaders;
+	private final ObjectId id;
+	private final Document heartbeatDoc;
+	private final Bson filter;
+	private final UpdateOptions uo;
 
-    public MongoLeader(MongoClient mongoClient, String leaderKey, long ttl, String dbName, String meta) {
-        database = mongoClient.getDatabase(dbName);
-        leaders = database.getCollection(leaderKey);
+	public MongoLeader(MongoClient mongoClient, String leaderKey)
+	{
+		this(mongoClient, leaderKey,null);
+	}
 
-        IndexOptions indexOptions = new IndexOptions();
-        indexOptions.expireAfter(ttl, TimeUnit.SECONDS);
+	public MongoLeader(MongoClient mongoClient, String leaderKey, String meta)
+	{
+		this(mongoClient, leaderKey, DEFAULT_LOCK_LIFE, DEFAULT_LEADER_DB, meta);
+	}
 
-        leaders.createIndex(new Document(HEARTBEAT_FIELD, 1), indexOptions);
-        id = new ObjectId();
-        hb = new Document(HEARTBEAT_FIELD, -1).append(ID_FIELD, id).append("meta", meta);
-        filter = Filters.eq(ID_FIELD, id);
-        uo = new UpdateOptions();
-        uo.upsert(true);
-        System.out.println(id);
-    }
+	public MongoLeader(MongoClient mongoClient, String leaderKey, long ttl, String dbName, String meta)
+	{
+		database = mongoClient.getDatabase(dbName);
+		leaders = database.getCollection(leaderKey);
 
-    public synchronized void heartbeat() {
-        hb.replace(HEARTBEAT_FIELD, new Date());
-        leaders.updateOne(filter, new Document("$set", hb), uo);
-    }
+		IndexOptions indexOptions = new IndexOptions();
+		indexOptions.expireAfter(ttl, TimeUnit.SECONDS);
 
-    public boolean amLeader() {
-        heartbeat();
-        Document leader = leaders.find().sort(Sorts.ascending(ID_FIELD)).limit(1).first();
-        if (leader != null) {
-            return id.equals(leader.getObjectId(ID_FIELD));
-        }
-        return false;
-    }
+		leaders.createIndex(new Document(HEARTBEAT_FIELD, 1), indexOptions);
+		id = new ObjectId();
+		heartbeatDoc = new Document(HEARTBEAT_FIELD, -1).append(ID_FIELD, id);
+		if (meta != null && !meta.isEmpty())
+		{
+			heartbeatDoc.append("meta", meta);
+		}
+		filter = Filters.eq(ID_FIELD, id);
+		uo = new UpdateOptions();
+		uo.upsert(true);
+		System.out.println(id);
+	}
 
-    public long memberCount() {
-        return leaders.count();
-    }
+	public synchronized void heartbeat()
+	{
+		heartbeatDoc.replace(HEARTBEAT_FIELD, new Date());
+		leaders.updateOne(filter, new Document("$set", heartbeatDoc), uo);
+	}
 
-    public void stepDown() {
-        leaders.findOneAndDelete(filter);
-    }
+	public boolean amLeader()
+	{
+		heartbeat();
+		Document leader = leaders.find().sort(Sorts.ascending(ID_FIELD)).limit(1).first();
+		if (leader != null)
+		{
+			return id.equals(leader.getObjectId(ID_FIELD));
+		}
+		return false;
+	}
+
+	public long memberCount()
+	{
+		return leaders.count();
+	}
+
+	public void stepDown()
+	{
+		if(steppedDown.compareAndSet(false, true))
+		{
+			leaders.findOneAndDelete(filter);
+		}
+	}
+
+	@Override
+	public void close() throws Exception
+	{
+		stepDown();
+	}
+
+
 }
