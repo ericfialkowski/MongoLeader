@@ -20,6 +20,7 @@ public class MongoLeader implements AutoCloseable
 	public static final long DEFAULT_LOCK_LIFE = 5L;
 
 	private static final String HEARTBEAT_FIELD = "heartbeat";
+	private static final String META_FIELD = "meta";
 	private static final String ID_FIELD = "_id";
 
 	private final AtomicBoolean steppedDown = new AtomicBoolean();
@@ -28,6 +29,7 @@ public class MongoLeader implements AutoCloseable
 	private final MongoCollection<Document> leaders;
 	private final ObjectId id;
 	private final Document heartbeatDoc;
+	private final Document setDoc;
 	private final Bson filter;
 	private final UpdateOptions uo;
 
@@ -54,8 +56,9 @@ public class MongoLeader implements AutoCloseable
 		heartbeatDoc = new Document(HEARTBEAT_FIELD, -1).append(ID_FIELD, id);
 		if (meta != null && !meta.isEmpty())
 		{
-			heartbeatDoc.append("meta", meta);
+			heartbeatDoc.append(META_FIELD, meta);
 		}
+		setDoc = new Document("$set", heartbeatDoc);
 		filter = Filters.eq(ID_FIELD, id);
 		uo = new UpdateOptions();
 		uo.upsert(true);
@@ -64,7 +67,7 @@ public class MongoLeader implements AutoCloseable
 	public synchronized void heartbeat()
 	{
 		heartbeatDoc.replace(HEARTBEAT_FIELD, new Date());
-		leaders.updateOne(filter, new Document("$set", heartbeatDoc), uo);
+		leaders.updateOne(filter, setDoc, uo);
 	}
 
 	public boolean amLeader()
