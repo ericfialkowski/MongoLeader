@@ -1,5 +1,7 @@
 package org.ericski.mongoleader;
 
+import com.ericski.mongoleader.MongoLeader;
+import com.ericski.mongoleader.MongoLeaderBuilder;
 import com.mongodb.MongoClient;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;

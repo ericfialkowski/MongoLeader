@@ -1,4 +1,4 @@
-package org.ericski.mongoleader;
+package com.ericski.mongoleader;
 
 import com.mongodb.MongoClient;
 
