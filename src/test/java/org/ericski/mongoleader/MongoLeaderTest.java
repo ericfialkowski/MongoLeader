@@ -6,6 +6,7 @@ import com.mongodb.MongoClient;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import static org.junit.Assert.*;
+import org.junit.Before;
 //import org.junit.Ignore;
 //
 //@Ignore
@@ -19,6 +20,12 @@ public class MongoLeaderTest
 	public MongoLeaderTest()
 	{
 		mc = new MongoClient();
+	}
+
+	@Before
+	public void cleanUp()
+	{
+		mc.dropDatabase(MongoLeader.DEFAULT_LEADER_DB);
 	}
 
 	@Test
@@ -47,15 +54,29 @@ public class MongoLeaderTest
 	@Test
 	public void testExpiredLeader() throws InterruptedException
 	{
-		MongoLeader instance = new MongoLeader(mc, LEADERKEY, "main");
-		MongoLeader other = new MongoLeader(mc, LEADERKEY, "testExpiredLeader");
+		long failTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(2);
+		MongoLeader instance = new MongoLeaderBuilder()
+			.usingClient(mc)
+			.withKey(LEADERKEY)
+			.withMeta("main")
+			.withTTL(TimeUnit.SECONDS.toSeconds(5))
+			.build();
+		MongoLeader other = new MongoLeaderBuilder()
+			.usingClient(mc)
+			.withKey(LEADERKEY)
+			.withMeta("testExpiredLeader")
+			.withTTL(TimeUnit.SECONDS.toSeconds(5))
+			.build();
+
 		instance.heartbeat();
 		boolean result = other.amLeader();
 		assertEquals(false, result);
 		while (instance.memberCount() > 1)
 		{
-			TimeUnit.SECONDS.sleep(1);
+			TimeUnit.SECONDS.sleep(2);
 			other.heartbeat();
+			if(System.currentTimeMillis() > failTime )
+				fail("Didn't step down in time");
 		}
 		result = other.amLeader();
 		assertEquals(true, result);

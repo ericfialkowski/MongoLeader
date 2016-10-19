@@ -45,8 +45,13 @@ public class MongoLeader implements AutoCloseable
 
 	public MongoLeader(MongoClient mongoClient, String leaderKey, long ttl, String dbName, String meta)
 	{
-		database = mongoClient.getDatabase(dbName);
-		leaders = database.getCollection(leaderKey);
+		this(mongoClient, leaderKey, ttl, mongoClient.getDatabase(dbName), meta);
+	}
+
+	public MongoLeader(MongoClient mongoClient, String leaderKey, long ttl, MongoDatabase database, String meta)
+	{
+		this.database = database;
+		leaders = this.database.getCollection(leaderKey);
 
 		IndexOptions indexOptions = new IndexOptions();
 		indexOptions.expireAfter(ttl, TimeUnit.SECONDS);
@@ -99,6 +104,4 @@ public class MongoLeader implements AutoCloseable
 	{
 		stepDown();
 	}
-
-
 }
