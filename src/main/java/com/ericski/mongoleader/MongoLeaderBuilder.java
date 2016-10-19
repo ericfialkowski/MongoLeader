@@ -2,6 +2,7 @@ package com.ericski.mongoleader;
 
 import com.mongodb.MongoClient;
 import com.mongodb.client.MongoDatabase;
+import java.util.concurrent.TimeUnit;
 
 public class MongoLeaderBuilder
 {
@@ -31,6 +32,12 @@ public class MongoLeaderBuilder
 	public MongoLeaderBuilder withTTL(long ttl)
 	{
 		this.ttl = ttl;
+		return this;
+	}
+
+	public MongoLeaderBuilder withTTL(long duration, TimeUnit timeUnit)
+	{
+		this.ttl = timeUnit.toSeconds(duration);
 		return this;
 	}
 

@@ -59,13 +59,13 @@ public class MongoLeaderTest
 			.usingClient(mc)
 			.withKey(LEADERKEY)
 			.withMeta("main")
-			.withTTL(TimeUnit.SECONDS.toSeconds(5))
+			.withTTL(5)
 			.build();
 		MongoLeader other = new MongoLeaderBuilder()
 			.usingClient(mc)
 			.withKey(LEADERKEY)
 			.withMeta("testExpiredLeader")
-			.withTTL(TimeUnit.SECONDS.toSeconds(5))
+			.withTTL(5,TimeUnit.SECONDS)
 			.build();
 
 		instance.heartbeat();
