@@ -17,9 +17,11 @@ import org.bson.types.ObjectId;
 public class MongoLeader implements AutoCloseable
 {
 	public static final String DEFAULT_LEADER_DB = "leader_keys";
-	public static final long DEFAULT_LOCK_LIFE = 5L;
+	public static final int DEFAULT_LOCK_LIFE = 5;
 
+	private static final String EXPIRES_FIELD = "expires";
 	private static final String HEARTBEAT_FIELD = "heartbeat";
+	private static final String LOCK_FIELD = "lock_key";
 	private static final String META_FIELD = "meta";
 	private static final String ID_FIELD = "_id";
 
@@ -27,43 +29,42 @@ public class MongoLeader implements AutoCloseable
 
 	private final MongoDatabase database;
 	private final MongoCollection<Document> leaders;
+
+	private final String lockName;
+	private final int ttl;
 	private final ObjectId id;
-	private final Document heartbeatDoc;
+
+
+	private final Document lockDefinition;
 	private final Document setDoc;
 	private final Bson filter;
 	private final UpdateOptions uo;
 
-	public MongoLeader(MongoClient mongoClient, String leaderKey)
+	MongoLeader(String lockName, MongoClient mongoClient, String leaderKey, int ttl, String dbName, String meta)
 	{
-		this(mongoClient, leaderKey,null);
+		this(lockName,mongoClient, leaderKey, ttl, mongoClient.getDatabase(dbName), meta);
 	}
 
-	public MongoLeader(MongoClient mongoClient, String leaderKey, String meta)
+	MongoLeader(String lockName, MongoClient mongoClient, String leaderKey, int ttl, MongoDatabase database, String meta)
 	{
-		this(mongoClient, leaderKey, DEFAULT_LOCK_LIFE, DEFAULT_LEADER_DB, meta);
-	}
+		this.lockName = lockName;
+		this.ttl = ttl;
 
-	public MongoLeader(MongoClient mongoClient, String leaderKey, long ttl, String dbName, String meta)
-	{
-		this(mongoClient, leaderKey, ttl, mongoClient.getDatabase(dbName), meta);
-	}
-
-	public MongoLeader(MongoClient mongoClient, String leaderKey, long ttl, MongoDatabase database, String meta)
-	{
 		this.database = database;
 		leaders = this.database.getCollection(leaderKey);
 
+		// ensure the ttl index on the collection
 		IndexOptions indexOptions = new IndexOptions();
-		indexOptions.expireAfter(ttl, TimeUnit.SECONDS);
+		indexOptions.expireAfter(0L, TimeUnit.SECONDS);
+		leaders.createIndex(new Document(EXPIRES_FIELD, 1), indexOptions);
 
-		leaders.createIndex(new Document(HEARTBEAT_FIELD, 1), indexOptions);
 		id = new ObjectId();
-		heartbeatDoc = new Document(HEARTBEAT_FIELD, -1).append(ID_FIELD, id);
+		lockDefinition = new Document(LOCK_FIELD, this.lockName).append(ID_FIELD, id);
 		if (meta != null && !meta.isEmpty())
 		{
-			heartbeatDoc.append(META_FIELD, meta);
+			lockDefinition.append(META_FIELD, meta);
 		}
-		setDoc = new Document("$set", heartbeatDoc);
+		setDoc = new Document("$set", lockDefinition);
 		filter = Filters.eq(ID_FIELD, id);
 		uo = new UpdateOptions();
 		uo.upsert(true);
@@ -71,7 +72,7 @@ public class MongoLeader implements AutoCloseable
 
 	public synchronized void heartbeat()
 	{
-		heartbeatDoc.replace(HEARTBEAT_FIELD, new Date());
+		lockDefinition.replace(HEARTBEAT_FIELD, new Date());
 		leaders.updateOne(filter, setDoc, uo);
 	}
 

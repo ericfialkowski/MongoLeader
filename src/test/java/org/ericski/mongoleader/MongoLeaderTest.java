@@ -65,7 +65,7 @@ public class MongoLeaderTest
 			.usingClient(mc)
 			.withKey(LEADERKEY)
 			.withMeta("testExpiredLeader")
-			.withTTL(5,TimeUnit.SECONDS)
+			.withTTL(5)
 			.build();
 
 		instance.heartbeat();
