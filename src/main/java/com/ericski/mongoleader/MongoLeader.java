@@ -77,13 +77,20 @@ public class MongoLeader implements AutoCloseable
 
 	public boolean amLeader()
 	{
-		heartbeat();
+		boolean iAm;
 		Document leader = leaders.find().sort(Sorts.ascending(ID_FIELD)).limit(1).first();
 		if (leader != null)
 		{
-			return id.equals(leader.getObjectId(ID_FIELD));
+			iAm = id.equals(leader.getObjectId(ID_FIELD));
+			if(iAm)
+				heartbeat();
 		}
-		return false;
+		else
+		{
+			heartbeat();
+			iAm = true;
+		}
+		return iAm;
 	}
 
 	public long memberCount()
