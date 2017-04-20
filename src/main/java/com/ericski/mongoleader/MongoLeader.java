@@ -39,18 +39,18 @@ public class MongoLeader implements AutoCloseable
 	private final Bson filter;
 	private final FindOneAndReplaceOptions updateOptions;
 
-	MongoLeader(String lockName, MongoClient mongoClient, String leaderKey, long ttl, String dbName, String meta)
+	MongoLeader(String lockName, MongoClient mongoClient, String leaderCollectionName, long ttl, String dbName, String meta)
 	{
-		this(lockName, mongoClient, leaderKey, ttl, mongoClient.getDatabase(dbName), meta);
+		this(lockName, mongoClient, leaderCollectionName, ttl, mongoClient.getDatabase(dbName), meta);
 	}
 
-	MongoLeader(String lockName, MongoClient mongoClient, String leaderKey, long ttl, MongoDatabase database, String meta)
+	MongoLeader(String lockName, MongoClient mongoClient, String leaderCollectionName, long ttl, MongoDatabase database, String meta)
 	{
 		this.lockName = lockName;
 		this.ttl = ttl;
 
 		this.database = database;
-		leaders = this.database.getCollection(leaderKey);
+		leaders = this.database.getCollection(leaderCollectionName);
 
 		// ensure the ttl index on the collection
 		IndexOptions indexOptions = new IndexOptions();
@@ -79,7 +79,7 @@ public class MongoLeader implements AutoCloseable
 		updateOptions.upsert(true);
 	}
 
-	boolean heartbeat()
+	private boolean heartbeat()
 	{
 		boolean stillLeader;
 		lockDefinition.replace(EXPIRES_FIELD, expirationDate());
@@ -90,8 +90,13 @@ public class MongoLeader implements AutoCloseable
 		}
 		catch (MongoCommandException mce)
 		{
-			// dupe key, likely no longer the leader
-			stillLeader = false;
+			if(mce.getCode() == 11000)
+			{
+				// dupe key, likely no longer the leader
+				stillLeader = false;
+			}
+			else
+				throw mce;
 		}
 		return stillLeader;
 	}
@@ -107,11 +112,6 @@ public class MongoLeader implements AutoCloseable
 	public boolean amLeader()
 	{
 		return heartbeat();
-	}
-
-	long memberCount()
-	{
-		return leaders.count();
 	}
 
 	public void stepDown()

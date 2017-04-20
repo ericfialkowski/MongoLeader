@@ -1,7 +1,9 @@
 package com.ericski.mongoleader;
 
 import com.mongodb.MongoClient;
+import com.mongodb.client.MongoCollection;
 import java.util.concurrent.TimeUnit;
+import org.bson.Document;
 import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.Test;
@@ -40,7 +42,7 @@ public class MongoLeaderTest
 		System.out.println("testNotLeader");
 		MongoLeader instance = new MongoLeaderBuilder().usingDB(TEST_DATABASE_NAME).usingClient(mc).withKey(LEADERKEY).withMeta("main testNotLeader").build();
 		MongoLeader other = new MongoLeaderBuilder().usingDB(TEST_DATABASE_NAME).usingClient(mc).withKey(LEADERKEY).withMeta("other testNotLeader").build();
-		instance.heartbeat();
+		instance.amLeader();
 		boolean result = other.amLeader();
 		assertEquals(false, result);
 		result = instance.amLeader();
@@ -53,6 +55,7 @@ public class MongoLeaderTest
 	public void testExpiredLeader() throws InterruptedException
 	{
 		System.out.println("testExpiredLeader");
+		MongoCollection<Document> leaderCollection = mc.getDatabase(TEST_DATABASE_NAME).getCollection(MongoLeader.DEFAULT_LEADER_COLLECTION);
 		long failTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(5);
 		MongoLeader instance = new MongoLeaderBuilder()
 			.usingClient(mc)
@@ -69,10 +72,10 @@ public class MongoLeaderTest
 			.withTTL(15)
 			.build();
 
-		instance.heartbeat();
+		instance.amLeader();
 		boolean result = other.amLeader();
 		assertEquals(false, result);
-		while (instance.memberCount() > 0)
+		while (leaderCollection.count() > 0)
 		{
 			TimeUnit.SECONDS.sleep(15);
 			if (System.currentTimeMillis() > failTime)
