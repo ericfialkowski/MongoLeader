@@ -2,14 +2,15 @@ package com.ericski.mongoleader;
 
 import com.mongodb.MongoClient;
 import com.mongodb.client.MongoDatabase;
+import java.util.concurrent.TimeUnit;
 
 public class MongoLeaderBuilder
 {
 	private MongoClient mongoClient;
 	private String lockKey;
-	private String leaderCollection;
-	private int ttl = MongoLeader.DEFAULT_LOCK_LIFE;
-	private String dbName = MongoLeader.DEFAULT_LEADER_DB;
+	private String lockCollection = MongoLeader.DEFAULT_LEADER_COLLECTION;
+	private long ttl = MongoLeader.DEFAULT_LOCK_LIFE;
+	private String dbName;
 	private MongoDatabase db = null;
 	private String meta = null;
 
@@ -30,15 +31,21 @@ public class MongoLeaderBuilder
 	}
 
 
-	public MongoLeaderBuilder withLockCollection(String leaderCollection)
+	public MongoLeaderBuilder withLockCollection(String lockCollection)
 	{
-		this.leaderCollection = leaderCollection;
+		this.lockCollection = lockCollection;
 		return this;
 	}
 
-	public MongoLeaderBuilder withTTL(int ttl)
+	public MongoLeaderBuilder withTTL(long ttlSeconds)
 	{
-		this.ttl = ttl;
+		this.ttl = ttlSeconds;
+		return this;
+	}
+
+	public MongoLeaderBuilder withTTL(long ttl, TimeUnit unit)
+	{
+		this.ttl = unit.toSeconds(ttl);
 		return this;
 	}
 
@@ -62,9 +69,11 @@ public class MongoLeaderBuilder
 
 	public MongoLeader build()
 	{
-		if(db == null)
-			return new MongoLeader(lockKey,mongoClient, leaderCollection, ttl, dbName, meta);
-		else
-			return new MongoLeader(lockKey,mongoClient, leaderCollection, ttl, db, meta);
+		if(db != null)
+			return new MongoLeader(lockKey,mongoClient, lockCollection, ttl, db, meta);
+		else if(dbName != null)
+			return new MongoLeader(lockKey,mongoClient, lockCollection, ttl, dbName, meta);
+
+		throw new IllegalArgumentException("Must provide a mongodb object or database name");
 	}
 }
