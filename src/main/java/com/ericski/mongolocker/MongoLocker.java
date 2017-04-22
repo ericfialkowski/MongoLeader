@@ -16,10 +16,15 @@ import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.bson.types.ObjectId;
 
+/**
+ * A distributed lock using mongodb's TTL index feature
+ * 
+ * @author eric
+ */
 public class MongoLocker implements AutoCloseable
 {
 	public static final String DEFAULT_LOCK_COLLECTION = "locker_keys";
-	public static final long DEFAULT_LOCK_LIFE = 5;
+	public static final long DEFAULT_LOCK_SECONDS_TTL = 60;
 
 	private static final String EXPIRES_FIELD = "expires";
 	private static final String LOCK_FIELD = "lock_key";
@@ -75,24 +80,23 @@ public class MongoLocker implements AutoCloseable
 
 	private boolean checkLock()
 	{
-		boolean stillHeld;
+		lockReleased.set(false);
 		lockDefinition.replace(EXPIRES_FIELD, expirationDate());
 		try
 		{
 			locks.findOneAndReplace(filter, lockDefinition, updateOptions);
-			stillHeld = true;
+			return true;
 		}
 		catch (MongoCommandException mce)
 		{
 			if(mce.getCode() == 11000)
 			{
-				// dupe key, someone else holds the lock
-				stillHeld = false;
+				// dupe key violation, someone else holds the lock
+				return false;
 			}
 			else
 				throw mce;
 		}
-		return stillHeld;
 	}
 
 	private Date expirationDate()
@@ -102,11 +106,19 @@ public class MongoLocker implements AutoCloseable
 		return expirationDate;
 	}
 
+	/**
+	 * CHecks to see if this instance holds the lock
+	 *
+	 * @return true if the instance holds the lock
+	 */
 	public boolean haveLock()
 	{
 		return checkLock();
 	}
 
+	/**
+	 * Release the lock when done
+	 */
 	public void release()
 	{
 		if (lockReleased.compareAndSet(false, true))

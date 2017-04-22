@@ -12,7 +12,7 @@ public class MongoLockerTest
 {
 
 	private final MongoClient mc;
-	private static String LEADERKEY = "locks";
+	private static String LOCK_KEY = "lock";
 	private static final String TEST_DATABASE_NAME = "lock_tester";
 
 	public MongoLockerTest()
@@ -30,7 +30,7 @@ public class MongoLockerTest
 	public void testBasicLock()
 	{
 		System.out.println("testBasicLock");
-		MongoLocker instance = new MongoLockerBuilder().usingDB(TEST_DATABASE_NAME).usingClient(mc).withKey(LEADERKEY).withMeta("main testBasicLock").build();
+		MongoLocker instance = new MongoLockerBuilder().usingDB(TEST_DATABASE_NAME).usingClient(mc).withKey(LOCK_KEY).withMeta("main testBasicLock").build();
 		boolean result = instance.haveLock();
 		assertEquals(true, result);
 		instance.release();
@@ -40,8 +40,8 @@ public class MongoLockerTest
 	public void testNotLockHolder()
 	{
 		System.out.println("testNotLockHolder");
-		MongoLocker instance = new MongoLockerBuilder().usingDB(TEST_DATABASE_NAME).usingClient(mc).withKey(LEADERKEY).withMeta("main testNotLockHolder").build();
-		MongoLocker other = new MongoLockerBuilder().usingDB(TEST_DATABASE_NAME).usingClient(mc).withKey(LEADERKEY).withMeta("other testNotLockHolder").build();
+		MongoLocker instance = new MongoLockerBuilder().usingDB(TEST_DATABASE_NAME).usingClient(mc).withKey(LOCK_KEY).withMeta("main testNotLockHolder").build();
+		MongoLocker other = new MongoLockerBuilder().usingDB(TEST_DATABASE_NAME).usingClient(mc).withKey(LOCK_KEY).withMeta("other testNotLockHolder").build();
 		instance.haveLock();
 		boolean result = other.haveLock();
 		assertEquals(false, result);
@@ -60,14 +60,14 @@ public class MongoLockerTest
 		MongoLocker instance = new MongoLockerBuilder()
 			.usingClient(mc)
 			.usingDB(TEST_DATABASE_NAME)
-			.withKey(LEADERKEY)
+			.withKey(LOCK_KEY)
 			.withMeta("main testExpiredLock")
 			.withTTL(15)
 			.build();
 		MongoLocker other = new MongoLockerBuilder()
 			.usingClient(mc)
 			.usingDB(TEST_DATABASE_NAME)
-			.withKey(LEADERKEY)
+			.withKey(LOCK_KEY)
 			.withMeta("other testExpiredLock")
 			.withTTL(15)
 			.build();
