@@ -39,11 +39,6 @@ public class MongoLocker implements AutoCloseable
 	private final Bson filter;
 	private final FindOneAndReplaceOptions updateOptions;
 
-	MongoLocker(String lockName, MongoClient mongoClient, String lockCollectionName, long ttl, String dbName, String meta)
-	{
-		this(lockName, mongoClient, lockCollectionName, ttl, mongoClient.getDatabase(dbName), meta);
-	}
-
 	MongoLocker(String lockName, MongoClient mongoClient, String lockCollectionName, long ttl, MongoDatabase database, String meta)
 	{
 		this.lockName = lockName;
@@ -56,7 +51,6 @@ public class MongoLocker implements AutoCloseable
 		IndexOptions indexOptions = new IndexOptions();
 		indexOptions.expireAfter(0L, TimeUnit.SECONDS);
 		indexOptions.name("lock_expiration_ttl_ndx");
-
 		locks.createIndex(new Document(EXPIRES_FIELD, 1), indexOptions);
 
 		indexOptions = new IndexOptions();
@@ -79,40 +73,38 @@ public class MongoLocker implements AutoCloseable
 		updateOptions.upsert(true);
 	}
 
-	private boolean heartbeat()
+	private boolean checkLock()
 	{
-		boolean stillLeader;
+		boolean stillHeld;
 		lockDefinition.replace(EXPIRES_FIELD, expirationDate());
 		try
 		{
 			locks.findOneAndReplace(filter, lockDefinition, updateOptions);
-			stillLeader = true;
+			stillHeld = true;
 		}
 		catch (MongoCommandException mce)
 		{
 			if(mce.getCode() == 11000)
 			{
-				// dupe key, likely no longer the leader
-				stillLeader = false;
+				// dupe key, someone else holds the lock
+				stillHeld = false;
 			}
 			else
 				throw mce;
 		}
-		return stillLeader;
+		return stillHeld;
 	}
 
 	private Date expirationDate()
 	{
-
-		LocalDateTime localDateTime = LocalDateTime.now();
-		localDateTime = localDateTime.plusSeconds(ttl);
-		Date expire = Date.from(localDateTime.atZone(ZoneId.systemDefault()).toInstant());
-		return expire;
+		LocalDateTime expirationDateTime = LocalDateTime.now().plusSeconds(ttl);
+		Date expirationDate = Date.from(expirationDateTime.atZone(ZoneId.systemDefault()).toInstant());
+		return expirationDate;
 	}
 
 	public boolean haveLock()
 	{
-		return heartbeat();
+		return checkLock();
 	}
 
 	public void release()

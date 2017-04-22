@@ -30,7 +30,6 @@ public class MongoLockerBuilder
 		return this;
 	}
 
-
 	public MongoLockerBuilder withLockCollection(String lockCollection)
 	{
 		this.lockCollection = lockCollection;
@@ -69,10 +68,10 @@ public class MongoLockerBuilder
 
 	public MongoLocker build()
 	{
-		if(db != null)
-			return new MongoLocker(lockKey,mongoClient, lockCollection, ttl, db, meta);
-		else if(dbName != null)
-			return new MongoLocker(lockKey,mongoClient, lockCollection, ttl, dbName, meta);
+		if (db != null)
+			return new MongoLocker(lockKey, mongoClient, lockCollection, ttl, db, meta);
+		else if (dbName != null)
+			return new MongoLocker(lockKey, mongoClient, lockCollection, ttl, mongoClient.getDatabase(dbName), meta);
 
 		throw new IllegalArgumentException("Must provide a mongodb object or database name");
 	}
