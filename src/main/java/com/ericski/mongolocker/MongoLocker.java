@@ -1,4 +1,4 @@
-package com.ericski.mongoleader;
+package com.ericski.mongolocker;
 
 import com.mongodb.MongoClient;
 import com.mongodb.MongoCommandException;
@@ -16,9 +16,9 @@ import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.bson.types.ObjectId;
 
-public class MongoLeader implements AutoCloseable
+public class MongoLocker implements AutoCloseable
 {
-	public static final String DEFAULT_LEADER_COLLECTION = "leader_keys";
+	public static final String DEFAULT_LOCK_COLLECTION = "locker_keys";
 	public static final long DEFAULT_LOCK_LIFE = 5;
 
 	private static final String EXPIRES_FIELD = "expires";
@@ -26,10 +26,10 @@ public class MongoLeader implements AutoCloseable
 	private static final String META_FIELD = "meta";
 	private static final String ID_FIELD = "_id";
 
-	private final AtomicBoolean steppedDown = new AtomicBoolean();
+	private final AtomicBoolean lockReleased = new AtomicBoolean();
 
 	private final MongoDatabase database;
-	private final MongoCollection<Document> leaders;
+	private final MongoCollection<Document> locks;
 
 	private final String lockName;
 	private final long ttl;
@@ -39,30 +39,30 @@ public class MongoLeader implements AutoCloseable
 	private final Bson filter;
 	private final FindOneAndReplaceOptions updateOptions;
 
-	MongoLeader(String lockName, MongoClient mongoClient, String leaderCollectionName, long ttl, String dbName, String meta)
+	MongoLocker(String lockName, MongoClient mongoClient, String lockCollectionName, long ttl, String dbName, String meta)
 	{
-		this(lockName, mongoClient, leaderCollectionName, ttl, mongoClient.getDatabase(dbName), meta);
+		this(lockName, mongoClient, lockCollectionName, ttl, mongoClient.getDatabase(dbName), meta);
 	}
 
-	MongoLeader(String lockName, MongoClient mongoClient, String leaderCollectionName, long ttl, MongoDatabase database, String meta)
+	MongoLocker(String lockName, MongoClient mongoClient, String lockCollectionName, long ttl, MongoDatabase database, String meta)
 	{
 		this.lockName = lockName;
 		this.ttl = ttl;
 
 		this.database = database;
-		leaders = this.database.getCollection(leaderCollectionName);
+		locks = this.database.getCollection(lockCollectionName);
 
 		// ensure the ttl index on the collection
 		IndexOptions indexOptions = new IndexOptions();
 		indexOptions.expireAfter(0L, TimeUnit.SECONDS);
 		indexOptions.name("lock_expiration_ttl_ndx");
 
-		leaders.createIndex(new Document(EXPIRES_FIELD, 1), indexOptions);
+		locks.createIndex(new Document(EXPIRES_FIELD, 1), indexOptions);
 
 		indexOptions = new IndexOptions();
 		indexOptions.name("unique_lock_key_ndx");
 		indexOptions.unique(true);
-		leaders.createIndex(new Document(LOCK_FIELD, 1), indexOptions);
+		locks.createIndex(new Document(LOCK_FIELD, 1), indexOptions);
 
 		id = new ObjectId();
 		lockDefinition = new Document(LOCK_FIELD, this.lockName)
@@ -85,7 +85,7 @@ public class MongoLeader implements AutoCloseable
 		lockDefinition.replace(EXPIRES_FIELD, expirationDate());
 		try
 		{
-			leaders.findOneAndReplace(filter, lockDefinition, updateOptions);
+			locks.findOneAndReplace(filter, lockDefinition, updateOptions);
 			stillLeader = true;
 		}
 		catch (MongoCommandException mce)
@@ -103,28 +103,29 @@ public class MongoLeader implements AutoCloseable
 
 	private Date expirationDate()
 	{
-		LocalDateTime localDateTime = new Date().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+
+		LocalDateTime localDateTime = LocalDateTime.now();
 		localDateTime = localDateTime.plusSeconds(ttl);
 		Date expire = Date.from(localDateTime.atZone(ZoneId.systemDefault()).toInstant());
 		return expire;
 	}
 
-	public boolean amLeader()
+	public boolean haveLock()
 	{
 		return heartbeat();
 	}
 
-	public void stepDown()
+	public void release()
 	{
-		if (steppedDown.compareAndSet(false, true))
+		if (lockReleased.compareAndSet(false, true))
 		{
-			leaders.findOneAndDelete(filter);
+			locks.findOneAndDelete(filter);
 		}
 	}
 
 	@Override
 	public void close() throws Exception
 	{
-		stepDown();
+		release();
 	}
 }
